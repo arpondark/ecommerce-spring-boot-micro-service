@@ -32,12 +32,12 @@ public class UserService {
 
 
 
-    public Optional<UserResponse> getUserById(Long id) {
+    public Optional<UserResponse> getUserById(String id) {
         return userRepository.findById(id)
                 .map(this::mapToUserResponse);
     }
 
-    public Boolean updateUser(Long id, UserRequest updatedUser) {
+    public Boolean updateUser(String id, UserRequest updatedUser) {
         return userRepository.findById(id)
                 .map(existingUser -> {
                     existingUser.setFirstName(updatedUser.getFirstName());
@@ -81,7 +81,7 @@ public class UserService {
 
     private UserResponse mapToUserResponse(User user) {
         UserResponse userResponse = new UserResponse();
-        userResponse.setId(String.valueOf(user.getId()));
+        userResponse.setId(user.getId());
         userResponse.setFirstName(user.getFirstName());
         userResponse.setLastName(user.getLastName());
         userResponse.setEmail(user.getEmail());
@@ -99,4 +99,3 @@ public class UserService {
         return userResponse;
     }
 }
-
