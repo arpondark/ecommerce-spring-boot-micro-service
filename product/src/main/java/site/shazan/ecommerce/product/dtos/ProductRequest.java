@@ -12,4 +12,5 @@ public class ProductRequest {
     private Integer quantity;
     private String category;
     private String imageUrl;
+    private Boolean active;
 }

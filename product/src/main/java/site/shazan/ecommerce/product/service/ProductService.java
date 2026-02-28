@@ -43,7 +43,9 @@ public class ProductService {
         product.setCategory(productRequest.getCategory());
         product.setImageUrl(productRequest.getImageUrl());
         product.setQuantity(productRequest.getQuantity());
-
+        if (productRequest.getActive() != null) {
+            product.setActive(productRequest.getActive());
+        }
     }
 
     public ProductResponse updateProduct(Long id, ProductRequest productRequest) {
