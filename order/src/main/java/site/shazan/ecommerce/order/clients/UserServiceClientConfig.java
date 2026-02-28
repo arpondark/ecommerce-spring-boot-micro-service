@@ -1,6 +1,6 @@
 package site.shazan.ecommerce.order.clients;
 
-import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatusCode;
@@ -13,10 +13,9 @@ import java.util.Optional;
 @Configuration
 public class UserServiceClientConfig {
 
-
     @Bean
     public UserServiceClient userServiceClientConfigInterface(
-            RestClient.Builder builder) {
+            @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder builder) {
 
         RestClient restClient = builder
                 .baseUrl("http://user-service")

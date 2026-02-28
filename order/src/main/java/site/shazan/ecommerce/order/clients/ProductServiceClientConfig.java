@@ -1,6 +1,6 @@
 package site.shazan.ecommerce.order.clients;
 
-import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatusCode;
@@ -13,11 +13,15 @@ import java.util.Optional;
 @Configuration
 public class ProductServiceClientConfig {
 
-
     @Bean
-    public ProductServiceClient productServiceClientConfigInterface( RestClient.Builder builder) {
+    public ProductServiceClient productServiceClientConfigInterface(
+            @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder builder) {
 
-        RestClient restClient = builder.baseUrl("http://product-service").defaultStatusHandler(HttpStatusCode::is4xxClientError, ((request, response) -> Optional.empty())).build();
+        RestClient restClient = builder
+                .baseUrl("http://product-service")
+                .defaultStatusHandler(HttpStatusCode::is4xxClientError,
+                        ((request, response) -> Optional.empty()))
+                .build();
 
         RestClientAdapter adapter = RestClientAdapter.create(restClient);
         HttpServiceProxyFactory factory = HttpServiceProxyFactory.builderFor(adapter).build();
