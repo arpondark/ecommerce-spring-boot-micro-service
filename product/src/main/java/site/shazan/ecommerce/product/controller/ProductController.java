@@ -48,6 +48,15 @@ public class ProductController {
             return ResponseEntity.notFound().build();
         }
     }
+    @GetMapping("/{id}")
+    public ResponseEntity<ProductResponse> getProductById(@PathVariable String id) {
+        ProductResponse productResponse = productService.getProductById(Long.valueOf(id));
+        if (productResponse != null) {
+            return ResponseEntity.ok(productResponse);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
 
 
 }
