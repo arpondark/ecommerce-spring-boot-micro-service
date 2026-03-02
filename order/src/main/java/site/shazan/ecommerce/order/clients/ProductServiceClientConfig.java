@@ -18,7 +18,7 @@ public class ProductServiceClientConfig {
             @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder builder) {
 
         RestClient restClient = builder
-                .baseUrl("http://product-service")
+                .baseUrl("http://product")
                 .defaultStatusHandler(HttpStatusCode::is4xxClientError,
                         ((request, response) -> Optional.empty()))
                 .build();
