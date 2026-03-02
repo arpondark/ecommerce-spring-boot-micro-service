@@ -143,7 +143,7 @@ services:
       - gateway
     networks:
       - loki
-    
+
 
   gateway:
     image: nginx:latest
@@ -213,10 +213,18 @@ services:
       retries: 5
     networks:
       - loki
-  
+
 
   flog:
     image: mingrammer/flog
     command: -f json -d 200ms -l
+    networks:
+      - loki
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - 9411:9411
     networks:
       - loki
