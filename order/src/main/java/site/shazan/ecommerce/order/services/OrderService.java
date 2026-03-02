@@ -34,9 +34,9 @@ public class OrderService {
 //        }
 //        User user = userOptional.get();
 
-        // Calculate total price
+        // Calculate total price (price × quantity for each item)
         BigDecimal totalPrice = cartItems.stream()
-                .map(CartItem::getPrice)
+                .map(item -> item.getPrice().multiply(new BigDecimal(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Create order
