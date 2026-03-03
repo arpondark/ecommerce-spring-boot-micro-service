@@ -25,16 +25,20 @@ public class GatewayConfig {
                         .path("/eureka/**")
                         .uri("http://localhost:8761"))
                 .route("product", r -> r
-                        .path("/api/products/**")
+                        .path("/products/**")
+                        .filters(f -> f.rewritePath("/products(?<segment>/?.*)", "/api/products${segment}"))
                         .uri("lb://PRODUCT"))
                 .route("user", r -> r
-                        .path("/api/users/**")
+                        .path("/users/**")
+                        .filters(f -> f.rewritePath("/users(?<segment>/?.*)", "/api/users${segment}"))
                         .uri("lb://USER"))
                 .route("order-service", r -> r
-                        .path("/api/orders/**")
+                        .path("/orders/**")
+                        .filters(f -> f.rewritePath("/orders(?<segment>/?.*)", "/api/orders${segment}"))
                         .uri("lb://ORDER-SERVICE"))
                 .route("cart-service", r -> r
-                        .path("/api/cart/**")
+                        .path("/cart/**")
+                        .filters(f -> f.rewritePath("/cart(?<segment>/?.*)", "/api/cart${segment}"))
                         .uri("lb://ORDER-SERVICE"))
                 .build();
     }
