@@ -17,6 +17,13 @@ public class GatewayConfig {
     @Bean
     public RouteLocator routes(RouteLocatorBuilder builder) {
         return builder.routes()
+                .route("eureka-dashboard", r -> r
+                        .path("/eureka/main")
+                        .filters(f -> f.setPath("/"))
+                        .uri("http://localhost:8761"))
+                .route("eureka-static", r -> r
+                        .path("/eureka/**")
+                        .uri("http://localhost:8761"))
                 .route("product", r -> r
                         .path("/api/products/**")
                         .uri("lb://PRODUCT"))
