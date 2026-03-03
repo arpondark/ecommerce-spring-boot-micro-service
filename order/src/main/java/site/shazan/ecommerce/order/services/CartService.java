@@ -1,5 +1,6 @@
 package site.shazan.ecommerce.order.services;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import site.shazan.ecommerce.order.clients.ProductServiceClient;
 import site.shazan.ecommerce.order.clients.UserServiceClient;
 import site.shazan.ecommerce.order.dtos.CartItemRequest;
@@ -12,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -24,6 +24,7 @@ public class CartService {
     private final ProductServiceClient productServiceClient;
     private final UserServiceClient userServiceClient;
 
+    @CircuitBreaker(name = "product")
     public boolean addToCart(String userId, CartItemRequest request) {
         try {
             // Look for product
@@ -64,7 +65,7 @@ public class CartService {
     public boolean deleteItemFromCart(String userId, String productId) {
         CartItem cartItem = cartItemRepository.findByUserIdAndProductId(userId, productId);
 
-        if (cartItem != null){
+        if (cartItem != null) {
             cartItemRepository.delete(cartItem);
             return true;
         }
