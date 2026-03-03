@@ -1,25 +1,6 @@
 spring:
   application:
     name: gateway
-  cloud:
-    gateway:
-      routes:
-        - id: product
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/products/**
-        - id: user
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/users/**
-        - id: order-service
-          uri: http://localhost:8083
-          predicates:
-            - Path=/api/orders/**
-        - id: cart-service
-          uri: http://localhost:8083
-          predicates:
-            - Path=/api/cart/**
 
 server:
   port: 8080
@@ -29,10 +10,21 @@ management:
     web:
       exposure:
         include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+    metrics:
+      export:
+        enabled: true
 
-logging:
-  level:
-    org.springframework.cloud.gateway: TRACE
+#logging:
+#  level:
+#    org.springframework.cloud.gateway: TRACE
+#  pattern:
+#    level: "%5p [${spring.application.name:},%X{traceId},%X{spanId}]"
 
 eureka:
   client:
@@ -41,3 +33,4 @@ eureka:
       defaultZone: http://localhost:8761/eureka/
   instance:
     prefer-ip-address: true
+
