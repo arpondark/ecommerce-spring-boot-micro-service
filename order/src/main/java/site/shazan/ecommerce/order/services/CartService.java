@@ -1,6 +1,7 @@
 package site.shazan.ecommerce.order.services;
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import site.shazan.ecommerce.order.clients.ProductServiceClient;
 import site.shazan.ecommerce.order.clients.UserServiceClient;
 import site.shazan.ecommerce.order.dtos.CartItemRequest;
@@ -23,10 +24,13 @@ public class CartService {
     private final CartItemRepository cartItemRepository;
     private final ProductServiceClient productServiceClient;
     private final UserServiceClient userServiceClient;
+    int attempts = 0;
 
-    @CircuitBreaker(name = "product", fallbackMethod = "addToCartFallBack")
+    //@CircuitBreaker(name = "product", fallbackMethod = "addToCartFallBack")
+    @Retry(name = "product", fallbackMethod = "addToCartFallBack")
     public boolean addToCart(String userId, CartItemRequest request) {
         try {
+            System.out.println("Attempt: " + (++attempts));
             // Look for product
             ProductResponse productResponse = productServiceClient.getProductDetails(request.getProductId());
             if (productResponse == null || productResponse.getQuantity() < request.getQuantity()) {
