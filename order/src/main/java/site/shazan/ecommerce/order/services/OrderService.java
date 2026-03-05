@@ -1,7 +1,9 @@
 package site.shazan.ecommerce.order.services;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.stream.function.StreamBridge;
 import site.shazan.ecommerce.order.dtos.OrderCreatedEvent;
 import site.shazan.ecommerce.order.dtos.OrderItemDTO;
 import site.shazan.ecommerce.order.dtos.OrderResponse;
@@ -20,16 +22,19 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
     private final CartService cartService;
     private final OrderRepository orderRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final StreamBridge streamBridge;
 
-    @Value("${rabbitmq.exchange.name}")
-    private String exchangeName;
 
-    @Value("${rabbitmq.routing.key}")
-    private String routingKey;
+//    @Value("${rabbitmq.exchange.name}")
+//    private String exchangeName;
+//
+//    @Value("${rabbitmq.routing.key}")
+//    private String routingKey;
 
     public Optional<OrderResponse> createOrder(String userId) {
         // Validate for cart items
@@ -82,7 +87,9 @@ public class OrderService {
                 savedOrder.getCreatedAt()
         );
 
-        rabbitTemplate.convertAndSend(exchangeName,routingKey,event);
+
+        streamBridge.send("createOrder-out-0", event);
+        log.info("order send to rabbit mq : {}",event);
 
         return Optional.of(mapToOrderResponse(savedOrder));
     }
