@@ -2,6 +2,8 @@ package site.shazan.ecommerce.notification.config;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
+import site.shazan.ecommerce.notification.payload.OrderCreatedEvent;
+import site.shazan.ecommerce.notification.payload.OrderStatus;
 
 import java.util.Map;
 
@@ -9,12 +11,12 @@ import java.util.Map;
 public class OrderConsumer {
 
     @RabbitListener(queues = "${rabbitmq.queue.name}")
-    public void handleOverEvenet(Map<String, Object> orderEvent) {
+    public void handleOverEvenet(OrderCreatedEvent orderEvent) {
         System.out.println("Order Event Received: " + orderEvent);
-        long orderId = Long.parseLong(orderEvent.get("orderId").toString());
-        String status = orderEvent.get("status").toString();
+        long orderId = orderEvent.getOrderId();
+        OrderStatus orderStatus = orderEvent.getStatus();
         System.out.println("Order ID: " + orderId);
-        System.out.println("Order Status: " + status);
+        System.out.println("Order Status: " + orderStatus);
     }
 
 }

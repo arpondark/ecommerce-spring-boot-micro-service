@@ -2,6 +2,7 @@ package site.shazan.ecommerce.order.services;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import site.shazan.ecommerce.order.dtos.OrderCreatedEvent;
 import site.shazan.ecommerce.order.dtos.OrderItemDTO;
 import site.shazan.ecommerce.order.dtos.OrderResponse;
 import site.shazan.ecommerce.order.models.CartItem;
@@ -70,10 +71,32 @@ public class OrderService {
 
         // Clear the cart
         cartService.clearCart(userId);
-        rabbitTemplate.convertAndSend(exchangeName,routingKey,
-                Map.of("orderId", savedOrder.getId(),"status","CREATED"));
+
+        //public order created event to rabbitmq
+        OrderCreatedEvent event = new OrderCreatedEvent(
+                savedOrder.getId(),
+                savedOrder.getUserId(),
+                savedOrder.getStatus(),
+                mapToOrderItemDTOs(savedOrder.getItems()),
+                savedOrder.getTotalAmount(),
+                savedOrder.getCreatedAt()
+        );
+
+        rabbitTemplate.convertAndSend(exchangeName,routingKey,event);
 
         return Optional.of(mapToOrderResponse(savedOrder));
+    }
+
+    private List<OrderItemDTO> mapToOrderItemDTOs(List<OrderItem> orderItems) {
+        return orderItems.stream()
+                .map(orderItem -> new OrderItemDTO(
+                        orderItem.getId(),
+                        orderItem.getProductId(),
+                        orderItem.getQuantity(),
+                        orderItem.getPrice(),
+                        orderItem.getPrice().multiply(new BigDecimal(orderItem.getQuantity()))
+                ))
+                .toList();
     }
 
     private OrderResponse mapToOrderResponse(Order order) {
