@@ -23,10 +23,10 @@ public class SecurityConfig {
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         return http.csrf(csrf->csrf.disable())
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/products/**").hasRole("PRODUCT")
-                        .pathMatchers("/orders/**").hasRole("ORDER")
-                        .pathMatchers("/cart/**").hasRole("ORDER")
-                        .pathMatchers("/users/**").hasRole("USER")
+//                        .pathMatchers("/products/**").hasRole("PRODUCT")
+//                        .pathMatchers("/orders/**").hasRole("ORDER")
+//                        .pathMatchers("/cart/**").hasRole("ORDER")
+//                        .pathMatchers("/users/**").hasRole("USER")
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2->oauth2.jwt(jwt->jwt.jwtAuthenticationConverter(jwtConverter())) )
                 .build();
