@@ -1,66 +1,494 @@
-version: '3.8'
+version: "3.9"
 
 services:
   postgres:
-    image: postgres:latest
-    container_name: ecommerce-postgres
+    image: postgres:16
+    container_name: ecom-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: arpon007
-      POSTGRES_DB: ecommerce_product
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
-      - ecommerce-network
+      - ecom-net
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: ecommerce-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
+  postgres-db-init:
+    image: postgres:16
+    container_name: ecom-postgres-db-init
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      sh -c "
+      psql -h postgres -U $$POSTGRES_USER -d postgres -v ON_ERROR_STOP=1 -c \"SELECT 'CREATE DATABASE ecommerce_product' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ecommerce_product')\\gexec\";
+      psql -h postgres -U $$POSTGRES_USER -d postgres -v ON_ERROR_STOP=1 -c \"SELECT 'CREATE DATABASE ecommerce_order' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ecommerce_order')\\gexec\";
+      "
+    restart: "no"
     networks:
-      - ecommerce-network
+      - ecom-net
 
   mongodb:
-    image: mongo:latest
-    container_name: ecommerce-mongodb
+    image: mongo:7
+    container_name: ecom-mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     ports:
-      - "27018:27017"
+      - "${MONGO_HOST_PORT}:27017"
     volumes:
-      - mongodb-data:/data/db
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
-      - ecommerce-network
+      - ecom-net
 
-  rabbitmq:
-    image: rabbitmq:4-management
-    container_name: ecommerce-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+  redis:
+    image: redis:7-alpine
+    container_name: ecom-redis
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"
+      - "${REDIS_HOST_PORT}:6379"
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
-      - ecommerce-network
+      - ecom-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ecom-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "${ZOOKEEPER_HOST_PORT}:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ecom-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ecom-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT}
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "${KAFKA_HOST_PORT}:9092"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - ecom-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    container_name: ecom-keycloak
+    command: start-dev --http-port=8080
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_HOST_PORT}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q 'HTTP/1.1' <&3"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+    networks:
+      - ecom-net
+
+  configserver:
+    build:
+      context: ./configServer
+    container_name: ecom-configserver
+    depends_on:
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+      SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS: classpath:/config
+    ports:
+      - "${CONFIG_SERVER_HOST_PORT}:8888"
+    networks:
+      - ecom-net
+
+  eureka:
+    build:
+      context: ./eurekaServer
+    container_name: ecom-eureka
+    depends_on:
+      configserver:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8888
+    ports:
+      - "${EUREKA_HOST_PORT}:8761"
+    networks:
+      - ecom-net
+
+  user:
+    build:
+      context: ./user
+    container_name: ecom-user
+    depends_on:
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8888
+      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/ecom_user?authSource=admin
+      EUREKA_DEFAULT_ZONE: http://eureka:8761/eureka/
+      KEYCLOAK_SERVER_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_REALM: ecom-app
+      KEYCLOAK_CLIENT_ID: admin-cli
+      KEYCLOAK_CLIENT_UID: d56541ac-6cd7-420b-bbc8-722633a337c2
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+    ports:
+      - "8081:8081"
+    networks:
+      - ecom-net
+
+  product:
+    build:
+      context: ./product
+    container_name: ecom-product
+    depends_on:
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_started
+      postgres-db-init:
+        condition: service_completed_successfully
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8888
+      DB_URL: jdbc:postgresql://postgres:5432/ecommerce_product
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      EUREKA_DEFAULT_ZONE: http://eureka:8761/eureka/
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+    ports:
+      - "8082:8082"
+    networks:
+      - ecom-net
+
+  order-service:
+    build:
+      context: ./order
+    container_name: ecom-order-service
+    depends_on:
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_started
+      postgres-db-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8888
+      DB_URL: jdbc:postgresql://postgres:5432/ecommerce_order
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      EUREKA_DEFAULT_ZONE: http://eureka:8761/eureka/
+      KAFKA_BROKERS: kafka:29092
+      SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: kafka:29092
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+    ports:
+      - "8083:8083"
+    networks:
+      - ecom-net
+
+  notification:
+    build:
+      context: ./notification
+    container_name: ecom-notification
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: kafka:29092
+    ports:
+      - "8085:8085"
+    networks:
+      - ecom-net
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: ecom-gateway
+    depends_on:
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_started
+      user:
+        condition: service_started
+      product:
+        condition: service_started
+      order-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://configserver:8888
+      EUREKA_DEFAULT_ZONE: http://eureka:8761/eureka/
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/ecom-app
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/ecom-app
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+    ports:
+      - "${GATEWAY_HOST_PORT}:8080"
+    networks:
+      - ecom-net
+
+  read:
+    image: grafana/loki:latest
+    container_name: loki-read
+    command: "-config.file=/etc/loki/config.yaml -target=read"
+    ports:
+      - "3101:3100"
+    volumes:
+      - ./Additional/evaluate-prometheus/logging/loki-config.yaml:/etc/loki/config.yaml
+    depends_on:
+      - minio
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-net
+
+  write:
+    image: grafana/loki:latest
+    container_name: loki-write
+    command: "-config.file=/etc/loki/config.yaml -target=write"
+    ports:
+      - "3102:3100"
+    volumes:
+      - ./Additional/evaluate-prometheus/logging/loki-config.yaml:/etc/loki/config.yaml
+    depends_on:
+      - minio
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-net
+
+  minio:
+    image: minio/minio
+    container_name: loki-minio
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /data/loki-data && \
+        mkdir -p /data/loki-ruler && \
+        minio server /data
+    environment:
+      MINIO_ROOT_USER: loki
+      MINIO_ROOT_PASSWORD: supersecret
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+      MINIO_UPDATE: off
+    volumes:
+      - loki_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 20s
+      retries: 5
+    networks:
+      - ecom-net
+
+  loki-gateway:
+    image: nginx:latest
+    container_name: loki-gateway
+    depends_on:
+      - read
+      - write
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        cat <<EOF > /etc/nginx/nginx.conf
+        user  nginx;
+        worker_processes  2;
+        events { worker_connections 1000; }
+        http {
+          resolver 127.0.0.11;
+          server {
+            listen 3100;
+            location = / { return 200 'OK'; auth_basic off; }
+            location = /api/prom/push { proxy_pass http://write:3100\$$request_uri; }
+            location = /api/prom/tail {
+              proxy_pass http://read:3100\$$request_uri;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+            }
+            location ~ /api/prom/.* { proxy_pass http://read:3100\$$request_uri; }
+            location = /loki/api/v1/push { proxy_pass http://write:3100\$$request_uri; }
+            location = /loki/api/v1/tail {
+              proxy_pass http://read:3100\$$request_uri;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+            }
+            location ~ /loki/api/.* { proxy_pass http://read:3100\$$request_uri; }
+          }
+        }
+        EOF
+        /docker-entrypoint.sh nginx -g "daemon off;"
+    ports:
+      - "3100:3100"
+    networks:
+      - ecom-net
+
+  backend:
+    image: grafana/loki:latest
+    container_name: loki-backend
+    command: "-config.file=/etc/loki/config.yaml -target=backend -legacy-read-mode=false"
+    volumes:
+      - ./Additional/evaluate-prometheus/logging/loki-config.yaml:/etc/loki/config.yaml
+    depends_on:
+      - loki-gateway
+    networks:
+      - ecom-net
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: ecom-alloy
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    volumes:
+      - ./Additional/evaluate-prometheus/logging/alloy-local-config.yaml:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/logs-parent:ro
+    ports:
+      - "12345:12345"
+    depends_on:
+      - loki-gateway
+    networks:
+      - ecom-net
+
+  prometheus:
+    image: prom/prometheus:v2.44.0
+    container_name: ecom-prometheus
+    ports:
+      - "${PROMETHEUS_HOST_PORT}:9090"
+    volumes:
+      - ./Additional/evaluate-prometheus/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - ecom-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecom-grafana
+    environment:
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+          - name: Loki
+            type: loki
+            access: proxy
+            url: http://loki-gateway:3100
+            jsonData:
+              httpHeaderName1: "X-Scope-OrgID"
+            secureJsonData:
+              httpHeaderValue1: "tenant1"
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            url: http://prometheus:9090
+        EOF
+        /run.sh
+    depends_on:
+      - loki-gateway
+      - prometheus
+    ports:
+      - "${GRAFANA_HOST_PORT}:3000"
+    networks:
+      - ecom-net
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: ecom-zipkin
+    ports:
+      - "${ZIPKIN_HOST_PORT}:9411"
+    networks:
+      - ecom-net
 
 volumes:
-  postgres-data:
-  mongodb-data:
-  rabbitmq-data:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_log:
+  loki_minio_data:
 
 networks:
-  ecommerce-network:
+  ecom-net:
     driver: bridge
 
