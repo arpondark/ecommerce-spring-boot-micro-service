@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
+    private final KeyCloakAdminService keyCloakAdminService;
 
     public List<UserResponse> fetchAllUsers() {
         return userRepository.findAll().stream()
@@ -25,8 +26,13 @@ public class UserService {
     }
 
     public void addUser(UserRequest userRequest) {
+        String token = keyCloakAdminService.getAdminAccessToken();
+        String keyloakUserId = keyCloakAdminService.createUser(token,userRequest);
         User user = new User();
         updateUserFromRequest(user, userRequest);
+        user.setKeycloakId(keyloakUserId);
+        keyCloakAdminService.assignRealmRoleToUser(userRequest.getUserName(),
+                "USER", keyloakUserId);
         userRepository.save(user);
     }
 
@@ -62,6 +68,7 @@ public class UserService {
 
 
     private void updateUserFromRequest(User user, UserRequest userRequest) {
+
         user.setFirstName(userRequest.getFirstName());
         user.setLastName(userRequest.getLastName());
         user.setEmail(userRequest.getEmail());
